@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'Automated CTF Solver',
-  description: 'AI-Powered CTF Solving Assistant',
+  title: 'AI Agent Collaboration Hub',
+  description: 'Interact with, manage, and deploy a team of specialized AI agents.',
 };
 
 export default function RootLayout({
