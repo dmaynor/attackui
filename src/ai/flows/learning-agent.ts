@@ -15,11 +15,11 @@ const RecommendEffectiveTechniquesInputSchema = z.object({
   challengeLogs: z
     .string()
     .describe(
-      'Logs from previous CTF challenges, including attempted techniques and outcomes.'
+      'Logs from previous CTF challenges, including attempted techniques and outcomes. Can be empty.'
     ),
   vulnerabilityType: z
     .string()
-    .describe('The specific type of vulnerability being addressed.'),
+    .describe('The specific type of vulnerability being addressed (e.g., SQL Injection, XSS).'),
 });
 export type RecommendEffectiveTechniquesInput = z.infer<
   typeof RecommendEffectiveTechniquesInputSchema
@@ -29,12 +29,12 @@ const RecommendEffectiveTechniquesOutputSchema = z.object({
   recommendedTechniques: z
     .string()
     .describe(
-      'A list of recommended techniques and tools for addressing the specified vulnerability type, based on the challenge logs.'
+      'A list of recommended techniques and tools for addressing the specified vulnerability type, based on insights from the challenge logs (if provided) or general best practices.'
     ),
   rationale: z
     .string()
     .describe(
-      'Explanation of why the recommended techniques are effective, based on the challenge logs.'
+      'Explanation of why the recommended techniques are effective, drawing from the challenge logs or general cybersecurity knowledge. Offer encouragement.'
     ),
 });
 export type RecommendEffectiveTechniquesOutput = z.infer<
@@ -51,15 +51,19 @@ const prompt = ai.definePrompt({
   name: 'recommendEffectiveTechniquesPrompt',
   input: {schema: RecommendEffectiveTechniquesInputSchema},
   output: {schema: RecommendEffectiveTechniquesOutputSchema},
-  prompt: `You are an expert cybersecurity analyst specializing in Capture The Flag (CTF) challenges. Based on the logs from previous CTF challenges and the specified vulnerability type, you will recommend the most effective techniques and tools for addressing the vulnerability.
+  prompt: `You are the Learning Agent. Act as an experienced cybersecurity mentor and strategist specializing in Capture The Flag (CTF) challenges.
+Your goal is to provide insightful and well-reasoned advice.
+
+Based on the provided vulnerability type and any available logs from previous CTF challenges, you will recommend the most effective techniques and tools.
+If logs are provided, draw clear connections between past experiences (successes and failures in the logs) and your future strategic recommendations.
+If no logs are provided, offer general best-practice advice for the given vulnerability type.
 
 Vulnerability Type: {{{vulnerabilityType}}}
 Challenge Logs:
-{{#if challengeLogs}}{{{challengeLogs}}}{{else}}No challenge logs provided.{{/if}}
+{{#if challengeLogs}}{{{challengeLogs}}}{{else}}No specific challenge logs provided. Base recommendations on general knowledge for the vulnerability type.{{/if}}
 
-Based on the provided challenge logs, recommend specific techniques and tools that have proven effective for this type of vulnerability. Explain why these techniques are effective, drawing from the insights in the logs.  If no logs are provided, provide general advice.
-
-Ensure that the recommended techniques are directly relevant to the vulnerability type and are supported by evidence from the challenge logs.
+Recommend specific techniques and tools. Explain the rationale clearly.
+Ensure your recommendations are directly relevant and practical. Offer a bit of encouragement in your rationale.
 `,
 });
 

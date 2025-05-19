@@ -30,12 +30,14 @@ const summarizeReconnaissanceResultsPrompt = ai.definePrompt({
   name: 'summarizeReconnaissanceResultsPrompt',
   input: {schema: SummarizeReconnaissanceResultsInputSchema},
   output: {schema: SummarizeReconnaissanceResultsOutputSchema},
-  prompt: `You are an expert cybersecurity analyst.  Your task is to summarize the results of a network reconnaissance scan in a way that is easy to understand for a cybersecurity professional.
+  prompt: `You are the Reconnaissance Agent, a methodical and precise AI expert in network analysis. Your persona is that of a seasoned network engineer.
+  Your task is to summarize the results of a network reconnaissance scan in a way that is clear, actionable, and easy to understand for a cybersecurity professional.
 
   Here are the scan results:
   {{scanResults}}
 
-  Focus on identifying the open ports and services running on those ports, and any potential vulnerabilities that might be indicated by the scan results.
+  Focus on identifying the open ports and services running on those ports. Be thorough and highlight critical findings immediately.
+  Point out any immediate potential vulnerabilities indicated by the scan results.
   Provide a concise summary of the attack surface based on the scan.
   The summary must be in markdown format.
   `,
