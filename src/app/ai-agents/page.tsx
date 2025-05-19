@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Bot, User, Send, AlertTriangle, Sparkles, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap } from 'lucide-react';
+import { Bot, User, Send, AlertTriangle, Users, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -52,7 +52,7 @@ interface Agent {
 
 interface ChatMessage {
   id: string;
-  sender: 'user' | AgentId; // Removed 'system' as technicalDirector handles general queries
+  sender: 'user' | AgentId;
   text: string | React.ReactNode;
   timestamp: Date;
   agentName?: string;
@@ -75,9 +75,9 @@ export default function AIAgentsPage() {
   const AVAILABLE_AGENTS: Agent[] = [
     { 
       id: 'technicalDirector', name: 'Technical Director', mentionTag: '@director', 
-      description: 'Mission command, task decomposition, delegates. Answers general questions.', 
-      avatarIcon: Briefcase, colorClass: 'text-indigo-400',
-      inputHint: '<High-level objective or query>',
+      description: 'Mission command, task decomposition, delegates. Handles general queries.', 
+      avatarIcon: Users, colorClass: 'text-indigo-400',
+      inputHint: '<High-level objective, strategy question, or general query>',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("A query is required for the Technical Director.");
         const result: StrategicAdviceOutput = await provideStrategicAdvice({ query: task });
@@ -88,7 +88,7 @@ export default function AIAgentsPage() {
       id: 'programmer', name: 'Programmer', mentionTag: '@programmer', 
       description: 'Full-stack software development, writes & debugs code.', 
       avatarIcon: Code, colorClass: 'text-sky-400',
-      inputHint: '<Code task, e.g., "write python script to...">',
+      inputHint: '<Code task, e.g., "write python script to parse logs">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @programmer agent.");
         const result: ProgrammingTaskOutput = await handleProgrammingTask({ taskDescription: task });
@@ -104,7 +104,7 @@ export default function AIAgentsPage() {
       id: 'qaEngineer', name: 'QA Engineer', mentionTag: '@qa', 
       description: 'Testing, validation, and verification.', 
       avatarIcon: ClipboardCheck, colorClass: 'text-lime-400',
-      inputHint: '<QA task, e.g., "generate test cases for login">',
+      inputHint: '<QA task, e.g., "generate test cases for login API">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @qa agent.");
         const result: QATaskOutput = await handleQATask({ taskDescription: task });
@@ -120,7 +120,7 @@ export default function AIAgentsPage() {
       id: 'networkEngineer', name: 'Network Engineer', mentionTag: '@network', 
       description: 'Infrastructure, security, communications.', 
       avatarIcon: Network, colorClass: 'text-teal-400',
-      inputHint: '<Network task, e.g., "design secure topology for X">',
+      inputHint: '<Network task, e.g., "suggest hardening for a web server">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @network agent.");
         const result: NetworkTaskOutput = await handleNetworkTask({ taskDescription: task });
@@ -134,9 +134,9 @@ export default function AIAgentsPage() {
     },
     { 
       id: 'hardwareEngineer', name: 'Hardware Engineer', mentionTag: '@hardware', 
-      description: 'FPGA, SDR, low-level systems support.', 
+      description: 'FPGA, SDR, low-level systems support (conceptual).', 
       avatarIcon: Cpu, colorClass: 'text-orange-400',
-      inputHint: '<Hardware query, e.g., "explain FPGA design flow">',
+      inputHint: '<Hardware query, e.g., "discuss RTL for a simple ALU">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @hardware agent.");
         const result: HardwareTaskOutput = await handleHardwareTask({ taskDescription: task });
@@ -152,7 +152,7 @@ export default function AIAgentsPage() {
       id: 'architect', name: 'Architect', mentionTag: '@architect', 
       description: 'System design and integration.', 
       avatarIcon: DraftingCompass, colorClass: 'text-purple-400',
-      inputHint: '<Architecture task, e.g., "design modular app architecture">',
+      inputHint: '<Architecture task, e.g., "design integration for two systems">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @architect agent.");
         const result: ArchitectureTaskOutput = await handleArchitectureTask({ taskDescription: task });
@@ -166,9 +166,9 @@ export default function AIAgentsPage() {
     },
     { 
       id: 'critic', name: 'Critic', mentionTag: '@critic', 
-      description: 'Code and logic auditor.', 
+      description: 'Code, logic, and design auditor.', 
       avatarIcon: SearchCheck, colorClass: 'text-yellow-400',
-      inputHint: '<"Item to review" then, optionally, "Focus: specific aspect">',
+      inputHint: '<Item to review> Focus: <optional: aspect to focus on>',
       aiHandler: async (task) => {
         const [itemToReview, ...focusParts] = task.split(/Focus:/i);
         if (!itemToReview.trim()) throw new Error("Item to review is required for @critic agent.");
@@ -184,9 +184,9 @@ export default function AIAgentsPage() {
     },
     { 
       id: 'gameMaster', name: 'Game-master', mentionTag: '@gamemaster', 
-      description: 'Red teamer, scenario planner, CTF creator.', 
+      description: 'Red teamer, scenario planner, CTF creator. Can interact with Cyberarena & Artifact Forge.', 
       avatarIcon: Gamepad2, colorClass: 'text-red-400',
-      inputHint: '<Scenario/challenge design task>',
+      inputHint: '<Scenario/challenge design task, e.g., "create hard pwn challenge in Artifact Forge" or "run ransomware simulation in Cyberarena">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @gamemaster agent.");
         const result: GameMasterTaskOutput = await handleGameMasterTask({ taskDescription: task });
@@ -248,7 +248,7 @@ export default function AIAgentsPage() {
               </CardHeader>
               <CardContent className="p-3 pt-0 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
                 {AVAILABLE_AGENTS.filter(a => a.id !== TECHNICAL_DIRECTOR_ID).map(agent => ( 
-                  <div key={agent.id} className="flex items-start gap-1">
+                  <div key={agent.id} className="flex items-start gap-1 py-1">
                     <agent.avatarIcon className={cn("h-3 w-3 mt-0.5 shrink-0", agent.colorClass)} /> 
                     <div>
                       <span className="font-semibold">{agent.mentionTag}</span>
@@ -299,7 +299,7 @@ export default function AIAgentsPage() {
           id: `director-error-${Date.now()}`,
           sender: TECHNICAL_DIRECTOR_ID,
           agentName: director?.name || "Technical Director",
-          text: `Agent with mention tag "${mentionTag}" not found. You can ask me for guidance or list available agents.`,
+          text: `Agent with mention tag "${mentionTag}" not found. I can help you find the right agent or you can list available agents.`,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, systemMessage]);
@@ -311,11 +311,9 @@ export default function AIAgentsPage() {
       task = trimmedInput; 
       if (!targetAgent) { 
         console.error("Technical Director agent not found in AVAILABLE_AGENTS");
-        // This case should ideally not be reachable if Technical Director is always defined.
-        // Fallback to a generic error message if director somehow isn't found.
          const errorMsg: ChatMessage = {
             id: `system-error-no-director-${Date.now()}`,
-            sender: 'technicalDirector', // Fallback ID, ensure it's handled visually
+            sender: 'technicalDirector', 
             agentName: 'System Monitor',
             text: `Critical error: Technical Director agent definition is missing. Cannot process general queries.`,
             timestamp: new Date(),
@@ -354,6 +352,8 @@ export default function AIAgentsPage() {
           };
           setMessages(prev => [...prev, agentResponseMessage]);
         } else {
+           // This case should ideally not be hit if all agents have an aiHandler, 
+           // but good for robustness if an agent is defined without one.
           setMessages(prev => prev.map(msg => 
             msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `${agentP.name} acknowledged the task. (Full AI functionality for this agent is conceptual or under development).`} : msg
           ));
@@ -366,7 +366,7 @@ export default function AIAgentsPage() {
           variant: "destructive",
         });
         setMessages(prev => prev.map(msg => 
-          msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error processing task.` } : msg
+          msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error processing task for "${task.substring(0,50)}${task.length > 50 ? '...' : ''}".` } : msg
         ));
         const errorResponseMessage: ChatMessage = {
           id: `agent-error-response-${Date.now()}`,
@@ -385,7 +385,7 @@ export default function AIAgentsPage() {
       } finally {
         setIsAgentProcessing(null);
          setMessages(prev => prev.map(msg => 
-          msg.id === agentWorkingMessageId && msg.isTyping ? {...msg, isTyping: false } : msg 
+          msg.id === agentWorkingMessageId && msg.isTyping ? {...msg, isTyping: false } : msg // Ensure typing is cleared
         ));
       }
     }
@@ -404,15 +404,13 @@ export default function AIAgentsPage() {
         const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
 
         if (lastAtSymbolIndex !== -1) {
-            // Extract the term being typed after '@' up to the cursor
             const potentialMentionQuery = textBeforeCursor.substring(lastAtSymbolIndex + 1);
             
-            // Only show suggestions if there's no space in the current @mention query
             if (!potentialMentionQuery.includes(' ')) {
                 suggestions = AVAILABLE_AGENTS.filter(agent =>
                     agent.mentionTag.toLowerCase().startsWith(`@${potentialMentionQuery.toLowerCase()}`) ||
                     (potentialMentionQuery.length > 0 && agent.name.toLowerCase().includes(potentialMentionQuery.toLowerCase()))
-                );
+                ).filter(agent => agent.id !== TECHNICAL_DIRECTOR_ID); // Exclude director from @ suggestions
                 if (suggestions.length > 0) {
                     shouldShow = true;
                 }
@@ -433,25 +431,23 @@ export default function AIAgentsPage() {
         
         if (lastAtSymbolIndex !== -1) {
             const textBeforeAt = currentVal.substring(0, lastAtSymbolIndex);
-            // Find the end of the current @mention (e.g., if user typed "@prog" and selected "@programmer")
-            // This part assumes the current @mention part might be incomplete and needs replacement.
             const textAfterCursorOriginal = currentVal.substring(cursorPosition);
-            const currentMentionPart = textBeforeCursor.substring(lastAtSymbolIndex);
-            const restOfInput = currentVal.substring(lastAtSymbolIndex + currentMentionPart.length);
+            const currentMentionPart = textBeforeCursor.substring(lastAtSymbolIndex); // e.g. "@prog"
+            const restOfInputAfterCurrentMention = currentVal.substring(lastAtSymbolIndex + currentMentionPart.length);
 
-            setInputValue(`${textBeforeAt}${agentMention} ${restOfInput.trimStart()}`);
+
+            setInputValue(`${textBeforeAt}${agentMention} ${restOfInputAfterCurrentMention.trimStart()}`);
             
-            // Set cursor position after the inserted mention + space
             setTimeout(() => {
                 inputRef.current?.focus();
                 const newCursorPosition = (textBeforeAt + agentMention + " ").length;
                 inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
             }, 0);
-        } else { // Fallback if somehow @ wasn't found before cursor
+        } else { 
              setInputValue(`${agentMention} `);
              setTimeout(() => inputRef.current?.focus(), 0);
         }
-    } else { // Fallback if cursor position is not available
+    } else { 
          setInputValue(prev => {
             const lastAt = prev.lastIndexOf('@');
             if (lastAt !== -1) return prev.substring(0, lastAt) + agentMention + " ";
@@ -471,7 +467,11 @@ export default function AIAgentsPage() {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
     // Fallback for system/director if ID somehow mismatches or for error messages not tied to a specific known agent
-    return <div className="h-full w-full flex items-center justify-center text-primary"><Briefcase className="h-5 w-5" /></div>; 
+    const director = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
+    if (director) {
+        return <div className={cn("h-full w-full flex items-center justify-center", director.colorClass)}><director.avatarIcon className="h-5 w-5" /></div>; 
+    }
+    return <Bot className="h-5 w-5" />; // Generic bot icon
   };
   
   const getSenderName = (sender: AgentId | 'user', agentName?: string) => {
@@ -491,7 +491,7 @@ export default function AIAgentsPage() {
       <Card className="flex-grow flex flex-col shadow-lg overflow-hidden">
         <CardHeader className="p-4 border-b">
           <CardTitle className="text-lg">Agent Chat Room</CardTitle>
-          <CardDescription>Ask the Technical Director, or mention an agent (e.g., @programmer) to task them.</CardDescription>
+          <CardDescription>Ask the Technical Director, or use @mention (e.g., @programmer) to task an agent.</CardDescription>
         </CardHeader>
         
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
@@ -514,7 +514,6 @@ export default function AIAgentsPage() {
                 <div className={cn(
                     "max-w-[70%] p-3 rounded-lg shadow", 
                     msg.sender === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card text-card-foreground rounded-bl-none',
-                    // For system/director messages that are part of initial setup or non-error system messages.
                     msg.sender === TECHNICAL_DIRECTOR_ID && msg.id.startsWith('director-welcome') && 'bg-muted text-muted-foreground w-full max-w-full'
                 )}>
                   <div className="flex items-center justify-between mb-1">
@@ -563,8 +562,8 @@ export default function AIAgentsPage() {
                   type="text"
                   value={inputValue}
                   onChange={handleInputValueChange}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} // Delay to allow click on suggestions
-                  placeholder="Ask the Technical Director, or use @mention to task an agent..."
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} 
+                  placeholder={isAgentProcessing ? "Waiting for agent..." : "Ask the Technical Director, or use @mention..."}
                   className="flex-grow bg-input focus:ring-primary"
                   disabled={!!isAgentProcessing}
                   autoComplete="off"
@@ -572,8 +571,8 @@ export default function AIAgentsPage() {
               </PopoverTrigger>
               {showSuggestions && filteredSuggestions.length > 0 && (
                 <PopoverContent
-                  className="w-[calc(100vw-2rem-48px-0.5rem)] sm:w-[350px] p-1" // Adjust width as needed
-                  onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus stealing
+                  className="w-[calc(100vw-2rem-48px-0.5rem)] sm:w-[350px] p-1" 
+                  onOpenAutoFocus={(e) => e.preventDefault()} 
                   align="start"
                   side="top" 
                   sideOffset={5}
@@ -586,7 +585,7 @@ export default function AIAgentsPage() {
                         variant="ghost"
                         className="w-full justify-start h-auto py-2 px-3 text-sm"
                         onClick={() => handleSuggestionClick(agent.mentionTag)}
-                        onMouseDown={(e) => e.preventDefault()} // Prevents input blur before click
+                        onMouseDown={(e) => e.preventDefault()} 
                       >
                         <agent.avatarIcon className={cn("h-4 w-4 mr-2 shrink-0", agent.colorClass)} />
                         <span className="font-semibold">{agent.mentionTag}</span>
@@ -605,7 +604,7 @@ export default function AIAgentsPage() {
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
               `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Agent'} is currently processing.` :
-              `The Technical Director (@director) is listening. Use @mention for other agents.` }
+              `The Technical Director (${TECHNICAL_DIRECTOR_ID === 'technicalDirector' ? AVAILABLE_AGENTS.find(a=>a.id === TECHNICAL_DIRECTOR_ID)?.mentionTag : '@director'}) handles general queries. Use @mention for other agents.` }
           </div>
         </div>
       </Card>
