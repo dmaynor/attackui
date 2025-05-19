@@ -5,4 +5,5 @@ import '@/ai/flows/vulnerability-assessment-agent.ts';
 import '@/ai/flows/flag-recognition-agent.ts';
 import '@/ai/flows/reconnaissance-agent.ts';
 import '@/ai/flows/learning-agent.ts';
-import '@/ai/flows/general-question-agent.ts'; // Added new agent
+import '@/ai/flows/general-question-agent.ts';
+import '@/ai/flows/technical-director-agent.ts'; // Added new Technical Director agent

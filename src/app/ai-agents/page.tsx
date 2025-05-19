@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Bot, User, ScanLine, ShieldAlert, Bomb, KeyRound, Flag, Brain, Send, AlertTriangle, Sparkles } from 'lucide-react';
+import { Bot, User, ScanLine, ShieldAlert, Bomb, KeyRound, Flag, Brain, Send, AlertTriangle, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -22,13 +22,15 @@ import { prioritizeVulnerabilities, type PrioritizeVulnerabilitiesInput, type Pr
 import { validateFlagFormat, type ValidateFlagFormatInput, type ValidateFlagFormatOutput } from '@/ai/flows/flag-recognition-agent';
 import { recommendEffectiveTechniques, type RecommendEffectiveTechniquesInput, type RecommendEffectiveTechniquesOutput } from '@/ai/flows/learning-agent';
 import { answerGeneralQuestion, type GeneralQuestionInput, type GeneralQuestionOutput } from '@/ai/flows/general-question-agent';
+import { provideStrategicAdvice, type StrategicAdviceInput, type StrategicAdviceOutput } from '@/ai/flows/technical-director-agent';
 
-type AgentId = 'reconAgent' | 'vulnAssessAgent' | 'exploitAgent' | 'privEscAgent' | 'flagRecAgent' | 'learningAgent' | 'assistant';
+
+type AgentId = 'reconAgent' | 'vulnAssessAgent' | 'exploitAgent' | 'privEscAgent' | 'flagRecAgent' | 'learningAgent' | 'technicalDirectorAgent' | 'assistant';
 
 interface Agent {
   id: AgentId;
   name: string;
-  mentionTag?: string; // Optional for general assistant
+  mentionTag?: string; 
   description: string;
   avatarIcon: React.ElementType;
   colorClass: string;
@@ -158,7 +160,15 @@ export default function AIAgentsPage() {
         );
       }
     },
-     // General Assistant - not in the mentionable list, but used implicitly
+    { 
+      id: 'technicalDirectorAgent', name: 'Tech Director Agent', mentionTag: '@director', description: 'Offers CTF strategy & agent coordination advice.', avatarIcon: Users, colorClass: 'text-indigo-400',
+      inputHint: '<Your question or scenario for strategic advice>',
+      aiHandler: async (task) => {
+        if (!task.trim()) throw new Error("A query is required for the @director agent.");
+        const result: StrategicAdviceOutput = await provideStrategicAdvice({ query: task });
+        return <div className="whitespace-pre-wrap">{result.advice}</div>;
+      }
+    },
     {
       id: GENERAL_ASSISTANT_ID, name: 'Assistant', description: 'Answers general questions.', avatarIcon: Sparkles, colorClass: 'text-green-400',
       aiHandler: async (question) => {
@@ -191,7 +201,7 @@ export default function AIAgentsPage() {
                 <CardTitle className="text-sm">Taskable Agents:</CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
-                {AVAILABLE_AGENTS.filter(agent => agent.mentionTag).map(agent => ( // Only show agents with mentionTag
+                {AVAILABLE_AGENTS.filter(agent => agent.mentionTag).map(agent => ( 
                   <div key={agent.id} className="flex items-start gap-1">
                     <agent.avatarIcon className={cn("h-3 w-3 mt-0.5 shrink-0", agent.colorClass)} /> 
                     <div>
@@ -245,14 +255,13 @@ export default function AIAgentsPage() {
         return;
       }
     } else {
-      // No @mention, treat as general question for the assistant
       targetAgent = AVAILABLE_AGENTS.find(a => a.id === GENERAL_ASSISTANT_ID);
-      task = trimmedInput; // The whole input is the question
+      task = trimmedInput; 
     }
 
     if (targetAgent) {
       setIsAgentProcessing(targetAgent.id);
-      const agentP = targetAgent; // To satisfy TypeScript compiler inside async blocks
+      const agentP = targetAgent; 
       const agentWorkingMessageId = `agent-working-${Date.now()}`;
       const agentWorkingMessage: ChatMessage = {
         id: agentWorkingMessageId,
@@ -279,28 +288,10 @@ export default function AIAgentsPage() {
           };
           setMessages(prev => [...prev, agentResponseMessage]);
         } else {
-           // Fallback for agents without AI handlers (simulated) - should not happen for general assistant
+          // Should not be reached if all agents have handlers or are general assistant
           setMessages(prev => prev.map(msg => 
-            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Simulating task for ${agentP.name}...`} : msg
+            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error: ${agentP.name} does not have an AI handler configured.`} : msg
           ));
-          setTimeout(() => {
-            const agentResponseMessage: ChatMessage = {
-              id: `agent-response-${Date.now()}`,
-              sender: agentP.id,
-              agentName: agentP.name,
-              text: (
-                <div>
-                  <p>Task completed for: <span className="font-semibold">"{task || 'general request'}"</span></p>
-                  <p className="text-xs mt-1 text-muted-foreground">
-                    (Simulated Response) This agent's AI is not fully wired here yet. 
-                    You can typically find more detailed options on the <NextLink href={`/${agentP.id.replace('Agent','').toLowerCase()}`} className="underline text-primary hover:text-primary/80">{agentP.name} page</NextLink>.
-                  </p>
-                </div>
-              ),
-              timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, agentResponseMessage]);
-          }, 1500);
         }
       } catch (e: any) {
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during AI processing.";
@@ -333,8 +324,6 @@ export default function AIAgentsPage() {
         ));
       }
     }
-    // Removed the 'else' block that showed "Agent with mention tag not found" or "To task an agent..."
-    // as it's now handled by the general assistant or specific agent not found logic.
   };
 
   const getAgentAvatar = (sender: AgentId | 'user' | 'system') => {
@@ -347,10 +336,6 @@ export default function AIAgentsPage() {
     const agent = AVAILABLE_AGENTS.find(a => a.id === sender);
     if (agent) {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
-    }
-    // Fallback for general assistant if not explicitly in AVAILABLE_AGENTS for avatar list
-    if (sender === GENERAL_ASSISTANT_ID) {
-      return <div className={cn("h-full w-full flex items-center justify-center", "text-green-400")}><Sparkles className="h-5 w-5" /></div>;
     }
     return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>;
   };
