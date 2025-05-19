@@ -184,9 +184,9 @@ export default function AIAgentsPage() {
     },
     { 
       id: 'gameMaster', name: 'Game-master', mentionTag: '@gamemaster', 
-      description: 'Red teamer, scenario planner, CTF creator. Can interact with Cyberarena & Artifact Forge.', 
+      description: 'Red teamer, scenario planner, CTF creator. Designs scenarios for Cyberarena & challenges for Artifact Forge.', 
       avatarIcon: Gamepad2, colorClass: 'text-red-400',
-      inputHint: '<Scenario/challenge design task, e.g., "create hard pwn challenge in Artifact Forge" or "run ransomware simulation in Cyberarena">',
+      inputHint: '<Scenario/challenge design task, e.g., "design a hard pwn challenge for Artifact Forge" or "design a ransomware simulation for Cyberarena">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @gamemaster agent.");
         const result: GameMasterTaskOutput = await handleGameMasterTask({ taskDescription: task });
@@ -604,11 +604,10 @@ export default function AIAgentsPage() {
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
               `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Agent'} is currently processing.` :
-              `The Technical Director (${TECHNICAL_DIRECTOR_ID === 'technicalDirector' ? AVAILABLE_AGENTS.find(a=>a.id === TECHNICAL_DIRECTOR_ID)?.mentionTag : '@director'}) handles general queries. Use @mention for other agents.` }
+              `The Technical Director (${AVAILABLE_AGENTS.find(a=>a.id === TECHNICAL_DIRECTOR_ID)?.mentionTag || '@director'}) handles general queries. Use @mention for other agents.` }
           </div>
         </div>
       </Card>
     </div>
   );
 }
-
