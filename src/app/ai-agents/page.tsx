@@ -3,16 +3,24 @@
 
 import type { FormEvent } from 'react';
 import { useState, useEffect, useRef } from 'react';
+import NextLink from 'next/link';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Bot, User, ScanLine, ShieldAlert, Bomb, KeyRound, Flag, Brain, Send, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { TerminalOutput } from '@/components/common/TerminalOutput';
+
+// Import AI Flow Functions
+import { summarizeReconnaissanceResults, type SummarizeReconnaissanceResultsInput, type SummarizeReconnaissanceResultsOutput } from '@/ai/flows/reconnaissance-agent';
+import { prioritizeVulnerabilities, type PrioritizeVulnerabilitiesInput, type PrioritizeVulnerabilitiesOutput } from '@/ai/flows/vulnerability-assessment-agent';
+import { validateFlagFormat, type ValidateFlagFormatInput, type ValidateFlagFormatOutput } from '@/ai/flows/flag-recognition-agent';
+import { recommendEffectiveTechniques, type RecommendEffectiveTechniquesInput, type RecommendEffectiveTechniquesOutput } from '@/ai/flows/learning-agent';
 
 type AgentId = 'reconAgent' | 'vulnAssessAgent' | 'exploitAgent' | 'privEscAgent' | 'flagRecAgent' | 'learningAgent';
 
@@ -22,17 +30,10 @@ interface Agent {
   mentionTag: string;
   description: string;
   avatarIcon: React.ElementType;
-  colorClass: string; // For styling agent messages
+  colorClass: string;
+  inputHint?: string; // Hint for expected input format
+  aiHandler?: (task: string) => Promise<React.ReactNode>; // Function to call the actual AI
 }
-
-const AVAILABLE_AGENTS: Agent[] = [
-  { id: 'reconAgent', name: 'Recon Agent', mentionTag: '@recon', description: 'Performs Nmap scans and summarizes results.', avatarIcon: ScanLine, colorClass: 'text-sky-400' },
-  { id: 'vulnAssessAgent', name: 'Vuln Assess Agent', mentionTag: '@vuln', description: 'Identifies and prioritizes vulnerabilities.', avatarIcon: ShieldAlert, colorClass: 'text-orange-400' },
-  { id: 'exploitAgent', name: 'Exploit Agent', mentionTag: '@exploit', description: 'Attempts to exploit vulnerabilities (Simulated).', avatarIcon: Bomb, colorClass: 'text-red-400' },
-  { id: 'privEscAgent', name: 'PrivEsc Agent', mentionTag: '@privesc', description: 'Attempts privilege escalation (Simulated).', avatarIcon: KeyRound, colorClass: 'text-yellow-400' },
-  { id: 'flagRecAgent', name: 'Flag Rec Agent', mentionTag: '@flag', description: 'Recognizes and validates CTF flags.', avatarIcon: Flag, colorClass: 'text-purple-400' },
-  { id: 'learningAgent', name: 'Learning Agent', mentionTag: '@learn', description: 'Provides insights from past CTF challenges.', avatarIcon: Brain, colorClass: 'text-teal-400' },
-];
 
 interface ChatMessage {
   id: string;
@@ -51,8 +52,112 @@ export default function AIAgentsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const AVAILABLE_AGENTS: Agent[] = [
+    { 
+      id: 'reconAgent', name: 'Recon Agent', mentionTag: '@recon', description: 'Performs Nmap scans and summarizes results.', avatarIcon: ScanLine, colorClass: 'text-sky-400',
+      inputHint: '<Nmap scan output>',
+      aiHandler: async (task) => {
+        if (!task.trim()) throw new Error("Nmap scan output is required for @recon agent.");
+        const result: SummarizeReconnaissanceResultsOutput = await summarizeReconnaissanceResults({ scanResults: task });
+        return <TerminalOutput title="Reconnaissance Summary" content={result.summary} className="mt-0 shadow-none border-none" />;
+      }
+    },
+    { 
+      id: 'vulnAssessAgent', name: 'Vuln Assess Agent', mentionTag: '@vuln', description: 'Identifies and prioritizes vulnerabilities.', avatarIcon: ShieldAlert, colorClass: 'text-orange-400',
+      inputHint: '<Vulnerability list/data>',
+      aiHandler: async (task) => {
+        if (!task.trim()) throw new Error("Vulnerability data is required for @vuln agent.");
+        const result: PrioritizeVulnerabilitiesOutput = await prioritizeVulnerabilities({ vulnerabilityData: task });
+        return (
+          <div>
+            <p className="font-semibold mb-1">Vulnerability Prioritization Report:</p>
+            {result.prioritizedVulnerabilities.length > 0 ? (
+              <ul className="list-disc pl-5 text-xs space-y-1">
+                {result.prioritizedVulnerabilities.map((v, i) => (
+                  <li key={i}>
+                    <strong>{v.vulnerability}</strong> (Score: {v.riskScore.toFixed(1)}) - {v.explanation}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">No vulnerabilities prioritized or data was insufficient.</p>
+            )}
+          </div>
+        );
+      }
+    },
+    { 
+      id: 'exploitAgent', name: 'Exploit Agent', mentionTag: '@exploit', description: 'Attempts to exploit vulnerabilities (Simulated).', avatarIcon: Bomb, colorClass: 'text-red-400',
+      inputHint: '<Target vulnerability details>',
+      aiHandler: async (task) => {
+         return (
+            <div>
+              <p>Task received for Exploit Agent: <span className="font-semibold">"{task}"</span></p>
+              <p className="text-xs mt-1 text-muted-foreground">
+                (AI Functionality Not Implemented) The Exploit Agent's AI capabilities are under development. 
+                For simulated exploits, please visit the <NextLink href="/exploitation" className="underline text-primary hover:text-primary/80">Exploitation page</NextLink>.
+              </p>
+            </div>
+          );
+      }
+    },
+    { 
+      id: 'privEscAgent', name: 'PrivEsc Agent', mentionTag: '@privesc', description: 'Attempts privilege escalation (Simulated).', avatarIcon: KeyRound, colorClass: 'text-yellow-400',
+      inputHint: '<System information/context>',
+      aiHandler: async (task) => {
+        return (
+            <div>
+              <p>Task received for PrivEsc Agent: <span className="font-semibold">"{task}"</span></p>
+              <p className="text-xs mt-1 text-muted-foreground">
+                (AI Functionality Not Implemented) The PrivEsc Agent's AI capabilities are under development. 
+                For simulated privilege escalation, please visit the <NextLink href="/privilege-escalation" className="underline text-primary hover:text-primary/80">Privilege Escalation page</NextLink>.
+              </p>
+            </div>
+          );
+      }
+    },
+    { 
+      id: 'flagRecAgent', name: 'Flag Rec Agent', mentionTag: '@flag', description: 'Recognizes and validates CTF flags.', avatarIcon: Flag, colorClass: 'text-purple-400',
+      inputHint: '<Potential flag string>',
+      aiHandler: async (task) => {
+        if (!task.trim()) throw new Error("A potential flag string is required for @flag agent.");
+        const result: ValidateFlagFormatOutput = await validateFlagFormat({ potentialFlag: task });
+        return (
+          <div>
+            <p>Flag: <span className="font-mono">{task}</span></p>
+            <p>Is Valid Format: {result.isValidFlagFormat ? 'Yes' : 'No'}</p>
+            <p>Confidence: {(result.confidenceScore * 100).toFixed(0)}%</p>
+          </div>
+        );
+      }
+    },
+    { 
+      id: 'learningAgent', name: 'Learning Agent', mentionTag: '@learn', description: 'Provides insights from past CTF challenges.', avatarIcon: Brain, colorClass: 'text-teal-400',
+      inputHint: '<vulnerability_type> <challenge_logs (optional)>',
+      aiHandler: async (task) => {
+        const taskParts = task.trim().split(/\s+/);
+        if (taskParts.length === 0 || !taskParts[0]) {
+          throw new Error("Vulnerability type is required for @learn agent. Usage: @learn <vulnerability_type> [challenge_logs]");
+        }
+        const vulnerabilityType = taskParts[0];
+        const challengeLogs = taskParts.slice(1).join(' ');
+        
+        const input: RecommendEffectiveTechniquesInput = { vulnerabilityType, challengeLogs: challengeLogs || "" };
+        const result: RecommendEffectiveTechniquesOutput = await recommendEffectiveTechniques(input);
+        return (
+          <div className="text-xs">
+            <p className="font-semibold mb-1">Recommendations for {vulnerabilityType}:</p>
+            <p className="font-semibold mt-2">Techniques:</p>
+            <pre className="whitespace-pre-wrap p-2 bg-muted/50 rounded-sm font-mono text-xs my-1">{result.recommendedTechniques}</pre>
+            <p className="font-semibold mt-2">Rationale:</p>
+            <pre className="whitespace-pre-wrap p-2 bg-muted/50 rounded-sm font-mono text-xs my-1">{result.rationale}</pre>
+          </div>
+        );
+      }
+    },
+  ];
+
   useEffect(() => {
-    // Scroll to bottom when messages change
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (viewport) {
@@ -68,18 +173,20 @@ export default function AIAgentsPage() {
         sender: 'system',
         text: (
           <div>
-            <p>Welcome to the AI Agents Hub! You can task agents using their @mention tag.</p>
-            <p className="text-xs mt-1">Example: <code className="bg-muted p-1 rounded-sm">@recon scan target.com</code></p>
+            <p>Welcome to the AI Agents Hub! Task agents using their @mention tag and providing the required input.</p>
             <Card className="mt-3">
               <CardHeader className="p-3">
                 <CardTitle className="text-sm">Available Agents:</CardTitle>
               </CardHeader>
-              <CardContent className="p-3 pt-0 text-xs grid grid-cols-2 gap-1">
+              <CardContent className="p-3 pt-0 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
                 {AVAILABLE_AGENTS.map(agent => (
-                  <div key={agent.id} className="flex items-center gap-1">
-                    <agent.avatarIcon className={cn("h-3 w-3", agent.colorClass)} /> 
-                    <span className="font-semibold">{agent.mentionTag}</span>: 
-                    <span className="text-muted-foreground truncate">{agent.description}</span>
+                  <div key={agent.id} className="flex items-start gap-1">
+                    <agent.avatarIcon className={cn("h-3 w-3 mt-0.5 shrink-0", agent.colorClass)} /> 
+                    <div>
+                      <span className="font-semibold">{agent.mentionTag}</span>
+                      <span className="text-muted-foreground ml-1 truncate text-xs">{agent.description}</span>
+                      {agent.inputHint && <p className="text-xs text-primary/70">Hint: {agent.mentionTag} {agent.inputHint}</p>}
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -110,7 +217,7 @@ export default function AIAgentsPage() {
     const mentionMatch = trimmedInput.match(/^(@[a-zA-Z0-9_]+)\s*(.*)/);
     if (mentionMatch) {
       const mentionTag = mentionMatch[1];
-      const task = mentionMatch[2] || "Received task.";
+      const task = mentionMatch[2] || "";
       const agent = AVAILABLE_AGENTS.find(a => a.mentionTag === mentionTag);
 
       if (agent) {
@@ -120,36 +227,81 @@ export default function AIAgentsPage() {
           id: agentWorkingMessageId,
           sender: agent.id,
           agentName: agent.name,
-          text: `Understood! Working on: "${task}"`,
+          text: `Understood! Working on task for ${agent.name}...`,
           timestamp: new Date(),
           isTyping: true,
         };
         setMessages(prev => [...prev, agentWorkingMessage]);
 
-        // Simulate agent processing
-        setTimeout(() => {
+        try {
+          if (agent.aiHandler) {
+            const aiResponse = await agent.aiHandler(task);
+            setMessages(prev => prev.map(msg => 
+              msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: "Processing complete. Here's the result:" } : msg
+            ));
+            const agentResponseMessage: ChatMessage = {
+              id: `agent-response-${Date.now()}`,
+              sender: agent.id,
+              agentName: agent.name,
+              text: aiResponse,
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, agentResponseMessage]);
+          } else {
+             // Fallback for agents without AI handlers (simulated)
+            setMessages(prev => prev.map(msg => 
+              msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Simulating task for ${agent.name}...`} : msg
+            ));
+            setTimeout(() => {
+              const agentResponseMessage: ChatMessage = {
+                id: `agent-response-${Date.now()}`,
+                sender: agent.id,
+                agentName: agent.name,
+                text: (
+                  <div>
+                    <p>Task completed for: <span className="font-semibold">"{task || 'general request'}"</span></p>
+                    <p className="text-xs mt-1 text-muted-foreground">
+                      (Simulated Response) This agent's AI is not fully wired here yet. 
+                      You can typically find more detailed options on the <NextLink href={`/${agent.id.replace('Agent','').toLowerCase()}`} className="underline text-primary hover:text-primary/80">{agent.name} page</NextLink>.
+                    </p>
+                  </div>
+                ),
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, agentResponseMessage]);
+            }, 1500);
+          }
+        } catch (e: any) {
+          const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during AI processing.";
+          toast({
+            title: `Error with ${agent.name}`,
+            description: errorMessage,
+            variant: "destructive",
+          });
           setMessages(prev => prev.map(msg => 
-            msg.id === agentWorkingMessageId ? {...msg, isTyping: false} : msg
+            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error processing task.` } : msg
           ));
-
-          const agentResponseMessage: ChatMessage = {
-            id: `agent-response-${Date.now()}`,
+          const errorResponseMessage: ChatMessage = {
+            id: `agent-error-response-${Date.now()}`,
             sender: agent.id,
             agentName: agent.name,
             text: (
-              <div>
-                <p>Task completed for: <span className="font-semibold">"{task}"</span></p>
-                <p className="text-xs mt-1 text-muted-foreground">
-                  (Simulated Response) For real results, please use the dedicated page for the {agent.name}.
-                  You can typically find more detailed options and actual outputs on the <Link href={`/${agent.id.replace('Agent','').toLowerCase()}`} className="underline text-primary hover:text-primary/80">{agent.name} page</Link>.
-                </p>
+              <div className="text-destructive">
+                <AlertTriangle className="inline h-4 w-4 mr-1" /> 
+                <strong>Error:</strong> {errorMessage}
+                {agent.inputHint && <p className="text-xs mt-1">Please check the input format: {agent.mentionTag} {agent.inputHint}</p>}
               </div>
             ),
             timestamp: new Date(),
           };
-          setMessages(prev => [...prev, agentResponseMessage]);
+          setMessages(prev => [...prev, errorResponseMessage]);
+        } finally {
           setIsAgentProcessing(null);
-        }, 2000 + Math.random() * 2000);
+           setMessages(prev => prev.map(msg => 
+            msg.id === agentWorkingMessageId && msg.isTyping ? {...msg, isTyping: false } : msg // Ensure typing indicator is removed
+          ));
+        }
+
       } else {
         const systemMessage: ChatMessage = {
           id: `system-error-${Date.now()}`,
@@ -159,21 +311,31 @@ export default function AIAgentsPage() {
         };
         setMessages(prev => [...prev, systemMessage]);
       }
+    } else {
+      // Handle messages not targeting an agent (e.g. general chat, not implemented here)
+      const systemMessage: ChatMessage = {
+        id: `system-info-${Date.now()}`,
+        sender: 'system',
+        text: "To task an agent, start your message with their @mention tag (e.g., @recon).",
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, systemMessage]);
     }
   };
 
-  const getAgentAvatar = (sender: AgentId | 'user' | 'system', agentName?: string) => {
+  const getAgentAvatar = (sender: AgentId | 'user' | 'system') => {
     if (sender === 'user') {
-      return <User className="h-6 w-6" />;
+      return <User className="h-full w-full" />;
     }
     if (sender === 'system') {
-      return <Bot className="h-6 w-6 text-primary" />;
+      return <Bot className="h-full w-full text-primary" />;
     }
     const agent = AVAILABLE_AGENTS.find(a => a.id === sender);
     if (agent) {
-      return <agent.avatarIcon className={cn("h-6 w-6", agent.colorClass)} />;
+      // Wrap icon in a div to control size if needed, or ensure icon itself takes full space
+      return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
-    return <Bot className="h-6 w-6" />;
+    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>;
   };
   
   const getSenderName = (sender: AgentId | 'user' | 'system', agentName?: string) => {
@@ -184,7 +346,7 @@ export default function AIAgentsPage() {
 
 
   return (
-    <div className="animate-fadeIn flex flex-col h-[calc(100vh-8rem)]"> {/* Adjust height as needed */}
+    <div className="animate-fadeIn flex flex-col h-[calc(100vh-8rem)]">
       <PageHeader
         title="AI Agents Hub"
         description="Interact with your AI cybersecurity agents in this chat."
@@ -194,7 +356,7 @@ export default function AIAgentsPage() {
       <Card className="flex-grow flex flex-col shadow-lg overflow-hidden">
         <CardHeader className="p-4 border-b">
           <CardTitle className="text-lg">Agent Chat Room</CardTitle>
-          <CardDescription>Mention an agent (e.g., @recon) to task them.</CardDescription>
+          <CardDescription>Mention an agent (e.g., @recon) to task them. Check agent list for input hints.</CardDescription>
         </CardHeader>
         
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
@@ -209,8 +371,8 @@ export default function AIAgentsPage() {
               >
                 {msg.sender !== 'user' && (
                   <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass, 'bg-opacity-20')}>
-                      {getAgentAvatar(msg.sender, msg.agentName)}
+                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass, 'bg-opacity-20 p-0')}>
+                      {getAgentAvatar(msg.sender as AgentId)}
                     </AvatarFallback>
                   </Avatar>
                 )}
@@ -248,22 +410,6 @@ export default function AIAgentsPage() {
                 )}
               </div>
             ))}
-             {isAgentProcessing && messages.every(m => m.sender !== isAgentProcessing || !m.isTyping) && (
-              // This logic might be redundant if typing is handled per message
-              <div className="flex items-start gap-3">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.colorClass, 'bg-opacity-20')}>
-                    {getAgentAvatar(isAgentProcessing as AgentId)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="max-w-[70%] p-3 rounded-lg shadow bg-card text-card-foreground rounded-bl-none">
-                  <div className="flex items-center gap-1 text-sm">
-                     <LoadingSpinner size={14} className="mr-1" />
-                     <span>{AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name} is processing...</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </ScrollArea>
 
@@ -274,7 +420,7 @@ export default function AIAgentsPage() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Type your message or task (e.g., @recon scan target.com)..."
+              placeholder="Type your message or task (e.g., @recon <Nmap output>)..."
               className="flex-grow bg-input focus:ring-primary"
               disabled={!!isAgentProcessing}
             />
@@ -286,7 +432,7 @@ export default function AIAgentsPage() {
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
               `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name} is currently processing a task.` :
-              `Mention an agent: ${AVAILABLE_AGENTS.map(a => a.mentionTag).join(', ')}`}
+              `Mention an agent. Example: @flag flag{example_flag}` }
           </div>
         </div>
       </Card>
@@ -294,15 +440,3 @@ export default function AIAgentsPage() {
   );
 }
 
-// Helper Link component to avoid full page reloads if possible (though for external-like links to other app pages, standard Link is fine)
-import NextLink from 'next/link';
-interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
-  href: string;
-}
-const Link: React.FC<LinkProps> = ({ href, children, ...props }) => {
-  return (
-    <NextLink href={href} passHref>
-      <a {...props}>{children}</a>
-    </NextLink>
-  );
-};
