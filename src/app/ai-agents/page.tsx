@@ -26,13 +26,8 @@ import { handleArchitectureTask, type ArchitectureTaskInput, type ArchitectureTa
 import { handleCritiqueTask, type CritiqueTaskInput, type CritiqueTaskOutput } from '@/ai/flows/critic-agent';
 import { handleGameMasterTask, type GameMasterTaskInput, type GameMasterTaskOutput } from '@/ai/flows/game-master-agent';
 import { handleEducationTask, type EducationTaskInput, type EducationTaskOutput } from '@/ai/flows/education-sme-agent';
-import { answerGeneralQuestion, type GeneralQuestionInput, type GeneralQuestionOutput } from '@/ai/flows/general-question-agent';
-
-// Original CTF agent imports (can be phased out or integrated if needed)
-// import { summarizeReconnaissanceResults, type SummarizeReconnaissanceResultsInput, type SummarizeReconnaissanceResultsOutput } from '@/ai/flows/reconnaissance-agent';
-// import { prioritizeVulnerabilities, type PrioritizeVulnerabilitiesInput, type PrioritizeVulnerabilitiesOutput } from '@/ai/flows/vulnerability-assessment-agent';
-// import { validateFlagFormat, type ValidateFlagFormatInput, type ValidateFlagFormatOutput } from '@/ai/flows/flag-recognition-agent';
-// import { recommendEffectiveTechniques, type RecommendEffectiveTechniquesInput, type RecommendEffectiveTechniquesOutput } from '@/ai/flows/learning-agent';
+// General question agent is not directly used by a dedicated UI agent anymore, but the flow can remain for future use.
+// import { answerGeneralQuestion, type GeneralQuestionInput, type GeneralQuestionOutput } from '@/ai/flows/general-question-agent';
 
 
 type AgentId = 
@@ -44,8 +39,8 @@ type AgentId =
   | 'architect' 
   | 'critic' 
   | 'gameMaster' 
-  | 'educationSME' 
-  | 'assistant';
+  | 'educationSME';
+  // Removed 'assistant' from AgentId as it's no longer a separate agent in the UI
 
 interface Agent {
   id: AgentId;
@@ -67,7 +62,7 @@ interface ChatMessage {
   isTyping?: boolean;
 }
 
-const GENERAL_ASSISTANT_ID: AgentId = 'assistant';
+const TECHNICAL_DIRECTOR_ID: AgentId = 'technicalDirector';
 
 export default function AIAgentsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -80,11 +75,11 @@ export default function AIAgentsPage() {
   const AVAILABLE_AGENTS: Agent[] = [
     { 
       id: 'technicalDirector', name: 'Technical Director', mentionTag: '@director', 
-      description: 'Mission command, task decomposition, delegates.', 
+      description: 'Mission command, task decomposition, delegates. Answers general questions.', 
       avatarIcon: Briefcase, colorClass: 'text-indigo-400',
       inputHint: '<High-level objective or query>',
       aiHandler: async (task) => {
-        if (!task.trim()) throw new Error("A query is required for the @director agent.");
+        if (!task.trim()) throw new Error("A query is required for the Technical Director.");
         const result: StrategicAdviceOutput = await provideStrategicAdvice({ query: task });
         return <div className="whitespace-pre-wrap">{result.advice}</div>;
       }
@@ -226,15 +221,7 @@ export default function AIAgentsPage() {
         );
       }
     },
-    {
-      id: GENERAL_ASSISTANT_ID, name: 'Assistant', mentionTag: '@assistant', description: 'Answers general questions.', avatarIcon: Sparkles, colorClass: 'text-green-400',
-      inputHint: '<Your general question>',
-      aiHandler: async (question) => {
-        if (!question.trim()) throw new Error("Question cannot be empty.");
-        const result: GeneralQuestionOutput = await answerGeneralQuestion({ question });
-        return result.answer;
-      }
-    }
+    // Removed the dedicated "Assistant" agent from this list
   ];
 
   useEffect(() => {
@@ -253,7 +240,7 @@ export default function AIAgentsPage() {
         sender: 'system',
         text: (
           <div>
-            <p>Welcome to the AI Agents Hub! Ask a general question, or task an agent using their @mention tag.</p>
+            <p>Welcome to the AI Agents Hub! Ask the Technical Director a question, or task a specific agent using their @mention tag.</p>
             <Card className="mt-3">
               <CardHeader className="p-3">
                 <CardTitle className="text-sm">Taskable Agents:</CardTitle>
@@ -277,6 +264,7 @@ export default function AIAgentsPage() {
       }
     ]);
     inputRef.current?.focus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -313,8 +301,8 @@ export default function AIAgentsPage() {
         return;
       }
     } else {
-      // If no @mention, send to general assistant
-      targetAgent = AVAILABLE_AGENTS.find(a => a.id === GENERAL_ASSISTANT_ID);
+      // If no @mention, send to Technical Director
+      targetAgent = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
       task = trimmedInput; 
     }
 
@@ -395,7 +383,7 @@ export default function AIAgentsPage() {
     if (agent) {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
-    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>;
+    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>; // Fallback, should not be reached if sender is a valid AgentId
   };
   
   const getSenderName = (sender: AgentId | 'user' | 'system', agentName?: string) => {
@@ -409,14 +397,14 @@ export default function AIAgentsPage() {
     <div className="animate-fadeIn flex flex-col h-[calc(100vh-8rem)]">
       <PageHeader
         title="AI Agents Hub"
-        description="Interact with your specialized AI agent team or ask general questions."
+        description="Interact with your specialized AI agent team. Ask the Technical Director general questions, or task specific agents."
         icon={Bot}
       />
 
       <Card className="flex-grow flex flex-col shadow-lg overflow-hidden">
         <CardHeader className="p-4 border-b">
           <CardTitle className="text-lg">Agent Chat Room</CardTitle>
-          <CardDescription>Ask a question or mention an agent (e.g., @programmer) to task them.</CardDescription>
+          <CardDescription>Ask the Technical Director a question, or mention an agent (e.g., @programmer) to task them.</CardDescription>
         </CardHeader>
         
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
@@ -431,7 +419,7 @@ export default function AIAgentsPage() {
               >
                 {msg.sender !== 'user' && (
                   <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass || (msg.sender === GENERAL_ASSISTANT_ID ? 'text-green-400' : ''), 'bg-opacity-20 p-0')}>
+                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass, 'bg-opacity-20 p-0')}>
                       {getAgentAvatar(msg.sender as AgentId)}
                     </AvatarFallback>
                   </Avatar>
@@ -444,7 +432,7 @@ export default function AIAgentsPage() {
                   <div className="flex items-center justify-between mb-1">
                     <span className={cn(
                       "text-xs font-semibold",
-                      msg.sender !== 'user' && (AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass || (msg.sender === GENERAL_ASSISTANT_ID ? 'text-green-400' : ''))
+                      msg.sender !== 'user' && AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass
                     )}>
                       {getSenderName(msg.sender, msg.agentName)}
                     </span>
@@ -485,7 +473,7 @@ export default function AIAgentsPage() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Ask the Assistant, or task an agent e.g. @programmer <your task>..."
+              placeholder="Ask the Technical Director, or task an agent e.g. @programmer <your task>..."
               className="flex-grow bg-input focus:ring-primary"
               disabled={!!isAgentProcessing}
             />
@@ -496,8 +484,8 @@ export default function AIAgentsPage() {
           </form>
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
-              `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Assistant'} is currently processing.` :
-              `The AI team is ready. Use @mention for specific agents or ask the Assistant.` }
+              `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Agent'} is currently processing.` :
+              `The AI team is ready. Use @mention for specific agents or ask the Technical Director.` }
           </div>
         </div>
       </Card>
@@ -505,3 +493,4 @@ export default function AIAgentsPage() {
   );
 }
 
+    
