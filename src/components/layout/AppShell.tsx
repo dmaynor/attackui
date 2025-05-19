@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/" className="flex items-center gap-2.5">
               <Terminal className="h-7 w-7 text-primary" />
               <h1 className="text-xl font-semibold text-foreground group-data-[collapsible=icon]:hidden">
-                CTF Solver
+                Team Violator
               </h1>
             </Link>
           </SidebarHeader>
