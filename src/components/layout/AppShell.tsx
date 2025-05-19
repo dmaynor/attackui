@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -26,6 +27,7 @@ import {
   Terminal,
   Settings,
   UserCircle,
+  Bot, // Added Bot icon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -47,6 +49,7 @@ const navItems = [
   { href: '/privilege-escalation', label: 'Privilege Escalation', icon: KeyRound },
   { href: '/flag-recognition', label: 'Flag Recognition', icon: Flag },
   { href: '/learning', label: 'Learning Center', icon: Brain },
+  { href: '/ai-agents', label: 'AI Agents', icon: Bot }, // Added AI Agents navigation item
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
