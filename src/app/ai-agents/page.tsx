@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 import { Bot, User, Send, AlertTriangle, Sparkles, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
@@ -26,9 +27,6 @@ import { handleArchitectureTask, type ArchitectureTaskInput, type ArchitectureTa
 import { handleCritiqueTask, type CritiqueTaskInput, type CritiqueTaskOutput } from '@/ai/flows/critic-agent';
 import { handleGameMasterTask, type GameMasterTaskInput, type GameMasterTaskOutput } from '@/ai/flows/game-master-agent';
 import { handleEducationTask, type EducationTaskInput, type EducationTaskOutput } from '@/ai/flows/education-sme-agent';
-// General question agent is not directly used by a dedicated UI agent anymore, but the flow can remain for future use.
-// import { answerGeneralQuestion, type GeneralQuestionInput, type GeneralQuestionOutput } from '@/ai/flows/general-question-agent';
-
 
 type AgentId = 
   | 'technicalDirector' 
@@ -40,7 +38,6 @@ type AgentId =
   | 'critic' 
   | 'gameMaster' 
   | 'educationSME';
-  // Removed 'assistant' from AgentId as it's no longer a separate agent in the UI
 
 interface Agent {
   id: AgentId;
@@ -71,6 +68,9 @@ export default function AIAgentsPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredSuggestions, setFilteredSuggestions] = useState<Agent[]>([]);
 
   const AVAILABLE_AGENTS: Agent[] = [
     { 
@@ -221,7 +221,6 @@ export default function AIAgentsPage() {
         );
       }
     },
-    // Removed the dedicated "Assistant" agent from this list
   ];
 
   useEffect(() => {
@@ -281,6 +280,8 @@ export default function AIAgentsPage() {
     };
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
+    setShowSuggestions(false);
+
 
     const mentionMatch = trimmedInput.match(/^(@[a-zA-Z0-9_]+)\s*(.*)/);
     let targetAgent: Agent | undefined;
@@ -294,7 +295,7 @@ export default function AIAgentsPage() {
          const systemMessage: ChatMessage = {
           id: `system-error-${Date.now()}`,
           sender: 'system',
-          text: `Agent with mention tag "${mentionTag}" not found.`,
+          text: `Agent with mention tag "${mentionTag}" not found. Task the Technical Director (@director) for guidance or general questions.`,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, systemMessage]);
@@ -304,6 +305,17 @@ export default function AIAgentsPage() {
       // If no @mention, send to Technical Director
       targetAgent = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
       task = trimmedInput; 
+      if (!targetAgent) { // Should not happen if director is always in AVAILABLE_AGENTS
+        console.error("Technical Director agent not found in AVAILABLE_AGENTS");
+        const systemMessage: ChatMessage = {
+          id: `system-error-no-director-${Date.now()}`,
+          sender: 'system',
+          text: `Critical error: Technical Director agent definition is missing.`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, systemMessage]);
+        return;
+      }
     }
 
     if (targetAgent) {
@@ -372,6 +384,77 @@ export default function AIAgentsPage() {
     }
   };
 
+  const handleInputValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPosition = e.target.selectionStart;
+    setInputValue(value);
+
+    let shouldShow = false;
+    let suggestions: Agent[] = [];
+
+    if (cursorPosition !== null) {
+        const textBeforeCursor = value.substring(0, cursorPosition);
+        const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+
+        if (lastAtSymbolIndex !== -1) {
+            // Extract the term being typed after '@' up to the cursor
+            const potentialMentionQuery = textBeforeCursor.substring(lastAtSymbolIndex + 1);
+            
+            // Only show suggestions if there's no space in the current @mention query
+            if (!potentialMentionQuery.includes(' ')) {
+                suggestions = AVAILABLE_AGENTS.filter(agent =>
+                    agent.mentionTag.toLowerCase().startsWith(`@${potentialMentionQuery.toLowerCase()}`) ||
+                    (potentialMentionQuery.length > 0 && agent.name.toLowerCase().includes(potentialMentionQuery.toLowerCase()))
+                );
+                if (suggestions.length > 0) {
+                    shouldShow = true;
+                }
+            }
+        }
+    }
+    setFilteredSuggestions(suggestions);
+    setShowSuggestions(shouldShow);
+  };
+
+  const handleSuggestionClick = (agentMention: string) => {
+    const currentVal = inputValue;
+    const cursorPosition = inputRef.current?.selectionStart;
+
+    if (cursorPosition !== null && cursorPosition !== undefined) {
+        const textBeforeCursor = currentVal.substring(0, cursorPosition);
+        const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+        
+        if (lastAtSymbolIndex !== -1) {
+            const textBeforeAt = currentVal.substring(0, lastAtSymbolIndex);
+            // Find the end of the current @mention (e.g., if user typed "@prog" and selected "@programmer")
+            // This part assumes the current @mention part might be incomplete and needs replacement.
+            const textAfterCursorOriginal = currentVal.substring(cursorPosition);
+            const currentMentionPart = textBeforeCursor.substring(lastAtSymbolIndex);
+            const restOfInput = currentVal.substring(lastAtSymbolIndex + currentMentionPart.length);
+
+            setInputValue(`${textBeforeAt}${agentMention} ${restOfInput.trimStart()}`);
+            
+            // Set cursor position after the inserted mention + space
+            setTimeout(() => {
+                inputRef.current?.focus();
+                const newCursorPosition = (textBeforeAt + agentMention + " ").length;
+                inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+            }, 0);
+        } else { // Fallback if somehow @ wasn't found before cursor
+             setInputValue(`${agentMention} `);
+             setTimeout(() => inputRef.current?.focus(), 0);
+        }
+    } else { // Fallback if cursor position is not available
+         setInputValue(prev => {
+            const lastAt = prev.lastIndexOf('@');
+            if (lastAt !== -1) return prev.substring(0, lastAt) + agentMention + " ";
+            return agentMention + " ";
+        });
+        setTimeout(() => inputRef.current?.focus(), 0);
+    }
+    setShowSuggestions(false);
+  };
+
   const getAgentAvatar = (sender: AgentId | 'user' | 'system') => {
     if (sender === 'user') {
       return <User className="h-full w-full" />;
@@ -383,7 +466,7 @@ export default function AIAgentsPage() {
     if (agent) {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
-    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>; // Fallback, should not be reached if sender is a valid AgentId
+    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>; 
   };
   
   const getSenderName = (sender: AgentId | 'user' | 'system', agentName?: string) => {
@@ -404,7 +487,7 @@ export default function AIAgentsPage() {
       <Card className="flex-grow flex flex-col shadow-lg overflow-hidden">
         <CardHeader className="p-4 border-b">
           <CardTitle className="text-lg">Agent Chat Room</CardTitle>
-          <CardDescription>Ask the Technical Director a question, or mention an agent (e.g., @programmer) to task them.</CardDescription>
+          <CardDescription>Ask the Technical Director, or mention an agent (e.g., @programmer) to task them.</CardDescription>
         </CardHeader>
         
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
@@ -467,16 +550,48 @@ export default function AIAgentsPage() {
         </ScrollArea>
 
         <div className="p-4 border-t bg-background">
-          <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-            <Input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Ask the Technical Director, or task an agent e.g. @programmer <your task>..."
-              className="flex-grow bg-input focus:ring-primary"
-              disabled={!!isAgentProcessing}
-            />
+          <form onSubmit={handleSendMessage} className="flex items-center gap-2 relative">
+            <Popover open={showSuggestions} onOpenChange={setShowSuggestions}>
+              <PopoverAnchor>
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={handleInputValueChange}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} // Delay to allow click on suggestions
+                  placeholder="Ask the Technical Director, or use @mention to task an agent..."
+                  className="flex-grow bg-input focus:ring-primary"
+                  disabled={!!isAgentProcessing}
+                  autoComplete="off"
+                />
+              </PopoverAnchor>
+              {showSuggestions && filteredSuggestions.length > 0 && (
+                <PopoverContent
+                  className="w-[calc(100vw-2rem-48px-0.5rem)] sm:w-[350px] p-1" // Adjust width as needed
+                  onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus stealing
+                  align="start"
+                  side="top" 
+                  sideOffset={5}
+                >
+                  <ScrollArea className="max-h-[200px]">
+                    <div className="text-xs text-muted-foreground p-2">Suggestions:</div>
+                    {filteredSuggestions.map((agent) => (
+                      <Button
+                        key={agent.id}
+                        variant="ghost"
+                        className="w-full justify-start h-auto py-2 px-3 text-sm"
+                        onClick={() => handleSuggestionClick(agent.mentionTag)}
+                        onMouseDown={(e) => e.preventDefault()} // Prevents input blur before click
+                      >
+                        <agent.avatarIcon className={cn("h-4 w-4 mr-2 shrink-0", agent.colorClass)} />
+                        <span className="font-semibold">{agent.mentionTag}</span>
+                        <span className="text-muted-foreground ml-1 truncate text-xs">- {agent.name}</span>
+                      </Button>
+                    ))}
+                  </ScrollArea>
+                </PopoverContent>
+              )}
+            </Popover>
             <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={!inputValue.trim() || !!isAgentProcessing}>
               <Send className="h-5 w-5" />
               <span className="sr-only">Send</span>
@@ -485,12 +600,10 @@ export default function AIAgentsPage() {
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
               `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Agent'} is currently processing.` :
-              `The AI team is ready. Use @mention for specific agents or ask the Technical Director.` }
+              `The Technical Director is listening. Use @mention for specific agents.` }
           </div>
         </div>
       </Card>
     </div>
   );
 }
-
-    
