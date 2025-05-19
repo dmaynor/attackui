@@ -1,3 +1,4 @@
+
 import { config } from 'dotenv';
 config();
 
@@ -8,7 +9,7 @@ import '@/ai/flows/reconnaissance-agent.ts';
 import '@/ai/flows/learning-agent.ts';
 
 // General Purpose Agents
-import '@/ai/flows/general-question-agent.ts';
+import '@/ai/flows/general-question-agent.ts'; // Kept for direct general queries if needed, though Tech Director is primary
 import '@/ai/flows/technical-director-agent.ts';
 
 // New Agent Team Structure
@@ -20,3 +21,4 @@ import '@/ai/flows/architect-agent.ts';
 import '@/ai/flows/critic-agent.ts';
 import '@/ai/flows/game-master-agent.ts';
 import '@/ai/flows/education-sme-agent.ts';
+import '@/ai/flows/communications-agent.ts'; // New Communications Agent

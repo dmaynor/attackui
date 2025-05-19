@@ -11,11 +11,11 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Bot, User, Send, AlertTriangle, Users, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap } from 'lucide-react';
+import { Bot, User, Send, AlertTriangle, Users, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap, Megaphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { TerminalOutput } from '@/components/common/TerminalOutput';
+import { TerminalOutput } from '@/components/common/TerminalOutput'; // Keep if complex outputs are needed
 
 // Import AI Flow Functions
 import { provideStrategicAdvice, type StrategicAdviceInput, type StrategicAdviceOutput } from '@/ai/flows/technical-director-agent';
@@ -27,6 +27,7 @@ import { handleArchitectureTask, type ArchitectureTaskInput, type ArchitectureTa
 import { handleCritiqueTask, type CritiqueTaskInput, type CritiqueTaskOutput } from '@/ai/flows/critic-agent';
 import { handleGameMasterTask, type GameMasterTaskInput, type GameMasterTaskOutput } from '@/ai/flows/game-master-agent';
 import { handleEducationTask, type EducationTaskInput, type EducationTaskOutput } from '@/ai/flows/education-sme-agent';
+import { handleCommunicationsTask, type CommunicationsTaskInput, type CommunicationsTaskOutput } from '@/ai/flows/communications-agent';
 
 type AgentId = 
   | 'technicalDirector' 
@@ -37,7 +38,8 @@ type AgentId =
   | 'architect' 
   | 'critic' 
   | 'gameMaster' 
-  | 'educationSME';
+  | 'educationSME'
+  | 'communicationsAgent';
 
 interface Agent {
   id: AgentId;
@@ -184,9 +186,9 @@ export default function AIAgentsPage() {
     },
     { 
       id: 'gameMaster', name: 'Game-master', mentionTag: '@gamemaster', 
-      description: 'Red teamer, scenario planner, CTF creator. Designs scenarios for Cyberarena & challenges for Artifact Forge.', 
+      description: 'Designs scenarios (Cyberarena) & CTF challenges (Artifact Forge).', 
       avatarIcon: Gamepad2, colorClass: 'text-red-400',
-      inputHint: '<Scenario/challenge design task, e.g., "design a hard pwn challenge for Artifact Forge" or "design a ransomware simulation for Cyberarena">',
+      inputHint: '<Scenario/challenge design task, e.g., "design hard pwn challenge for Artifact Forge">',
       aiHandler: async (task) => {
         if (!task.trim()) throw new Error("Task description is required for @gamemaster agent.");
         const result: GameMasterTaskOutput = await handleGameMasterTask({ taskDescription: task });
@@ -217,6 +219,37 @@ export default function AIAgentsPage() {
             <div className="text-xs">
                 <p className="font-semibold mb-1">Education SME Status: <span className="font-normal">{result.status}</span></p>
                 <pre className="whitespace-pre-wrap p-2 bg-muted/50 rounded-sm font-mono text-xs my-1">{result.suggestions}</pre>
+            </div>
+        );
+      }
+    },
+    { 
+      id: 'communicationsAgent', name: 'Communications Agent', mentionTag: '@comms', 
+      description: 'Generates news scripts & coordinates video updates (e.g., via Synthesia).', 
+      avatarIcon: Megaphone, colorClass: 'text-cyan-400',
+      inputHint: 'Topic: <news topic> [AvatarID: <id>] [Title: <video_title>]',
+      aiHandler: async (task) => {
+        // Basic parsing for topic, avatarId, and title
+        // Example: Topic: New Feature Launch AvatarID: anna_123 Title: Exciting News!
+        const topicMatch = task.match(/Topic:\s*(.*?)(?=\s*AvatarID:|\s*Title:|$)/i);
+        const avatarIdMatch = task.match(/AvatarID:\s*([\w-]+)/i);
+        const titleMatch = task.match(/Title:\s*(.*?)(?=\s*AvatarID:|$)/i);
+
+        const topic = topicMatch ? topicMatch[1].trim() : task.trim(); // Fallback to full task as topic
+        const avatarId = avatarIdMatch ? avatarIdMatch[1].trim() : undefined;
+        const title = titleMatch ? titleMatch[1].trim() : undefined;
+        
+        if (!topic) throw new Error("Topic is required for @comms agent. Format: Topic: <your topic> [AvatarID: <id>] [Title: <video_title>]");
+        
+        const result: CommunicationsTaskOutput = await handleCommunicationsTask({ topic, avatarId, title });
+        return (
+            <div className="text-xs">
+                <p className="font-semibold mb-1">Script Generated:</p>
+                <pre className="whitespace-pre-wrap p-2 bg-muted/50 rounded-sm font-mono text-xs my-1">{result.generatedScript}</pre>
+                <p className="font-semibold mt-2 mb-1">Video Creation (Mocked):</p>
+                <p>Status: <span className="font-normal">{result.videoCreationStatus}</span></p>
+                {result.videoId && <p>Video ID: <span className="font-normal">{result.videoId}</span></p>}
+                {result.toolResponseDetails && <p>Details: <span className="font-normal">{result.toolResponseDetails}</span></p>}
             </div>
         );
       }
@@ -306,7 +339,6 @@ export default function AIAgentsPage() {
         return;
       }
     } else {
-      // If no @mention, send to Technical Director
       targetAgent = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
       task = trimmedInput; 
       if (!targetAgent) { 
@@ -352,8 +384,6 @@ export default function AIAgentsPage() {
           };
           setMessages(prev => [...prev, agentResponseMessage]);
         } else {
-           // This case should ideally not be hit if all agents have an aiHandler, 
-           // but good for robustness if an agent is defined without one.
           setMessages(prev => prev.map(msg => 
             msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `${agentP.name} acknowledged the task. (Full AI functionality for this agent is conceptual or under development).`} : msg
           ));
@@ -406,7 +436,7 @@ export default function AIAgentsPage() {
         if (lastAtSymbolIndex !== -1) {
             const potentialMentionQuery = textBeforeCursor.substring(lastAtSymbolIndex + 1);
             
-            if (!potentialMentionQuery.includes(' ')) {
+            if (!potentialMentionQuery.includes(' ')) { // Only suggest if no space after query
                 suggestions = AVAILABLE_AGENTS.filter(agent =>
                     agent.mentionTag.toLowerCase().startsWith(`@${potentialMentionQuery.toLowerCase()}`) ||
                     (potentialMentionQuery.length > 0 && agent.name.toLowerCase().includes(potentialMentionQuery.toLowerCase()))
@@ -431,10 +461,8 @@ export default function AIAgentsPage() {
         
         if (lastAtSymbolIndex !== -1) {
             const textBeforeAt = currentVal.substring(0, lastAtSymbolIndex);
-            const textAfterCursorOriginal = currentVal.substring(cursorPosition);
-            const currentMentionPart = textBeforeCursor.substring(lastAtSymbolIndex); // e.g. "@prog"
+            const currentMentionPart = textBeforeCursor.substring(lastAtSymbolIndex);
             const restOfInputAfterCurrentMention = currentVal.substring(lastAtSymbolIndex + currentMentionPart.length);
-
 
             setInputValue(`${textBeforeAt}${agentMention} ${restOfInputAfterCurrentMention.trimStart()}`);
             
@@ -466,9 +494,8 @@ export default function AIAgentsPage() {
     if (agent) {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
-    // Fallback for system/director if ID somehow mismatches or for error messages not tied to a specific known agent
     const director = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
-    if (director) {
+    if (director) { // Fallback for system/director if ID somehow mismatches
         return <div className={cn("h-full w-full flex items-center justify-center", director.colorClass)}><director.avatarIcon className="h-5 w-5" /></div>; 
     }
     return <Bot className="h-5 w-5" />; // Generic bot icon
@@ -563,7 +590,7 @@ export default function AIAgentsPage() {
                   value={inputValue}
                   onChange={handleInputValueChange}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} 
-                  placeholder={isAgentProcessing ? "Waiting for agent..." : "Ask the Technical Director, or use @mention..."}
+                  placeholder={isAgentProcessing ? "Waiting for agent..." : `Ask ${AVAILABLE_AGENTS.find(a=>a.id === TECHNICAL_DIRECTOR_ID)?.mentionTag || '@director'}, or use @mention...`}
                   className="flex-grow bg-input focus:ring-primary"
                   disabled={!!isAgentProcessing}
                   autoComplete="off"
