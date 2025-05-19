@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Bot, User, ScanLine, ShieldAlert, Bomb, KeyRound, Flag, Brain, Send, AlertTriangle } from 'lucide-react';
+import { Bot, User, ScanLine, ShieldAlert, Bomb, KeyRound, Flag, Brain, Send, AlertTriangle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -21,18 +21,19 @@ import { summarizeReconnaissanceResults, type SummarizeReconnaissanceResultsInpu
 import { prioritizeVulnerabilities, type PrioritizeVulnerabilitiesInput, type PrioritizeVulnerabilitiesOutput } from '@/ai/flows/vulnerability-assessment-agent';
 import { validateFlagFormat, type ValidateFlagFormatInput, type ValidateFlagFormatOutput } from '@/ai/flows/flag-recognition-agent';
 import { recommendEffectiveTechniques, type RecommendEffectiveTechniquesInput, type RecommendEffectiveTechniquesOutput } from '@/ai/flows/learning-agent';
+import { answerGeneralQuestion, type GeneralQuestionInput, type GeneralQuestionOutput } from '@/ai/flows/general-question-agent';
 
-type AgentId = 'reconAgent' | 'vulnAssessAgent' | 'exploitAgent' | 'privEscAgent' | 'flagRecAgent' | 'learningAgent';
+type AgentId = 'reconAgent' | 'vulnAssessAgent' | 'exploitAgent' | 'privEscAgent' | 'flagRecAgent' | 'learningAgent' | 'assistant';
 
 interface Agent {
   id: AgentId;
   name: string;
-  mentionTag: string;
+  mentionTag?: string; // Optional for general assistant
   description: string;
   avatarIcon: React.ElementType;
   colorClass: string;
-  inputHint?: string; // Hint for expected input format
-  aiHandler?: (task: string) => Promise<React.ReactNode>; // Function to call the actual AI
+  inputHint?: string; 
+  aiHandler?: (task: string) => Promise<React.ReactNode>;
 }
 
 interface ChatMessage {
@@ -43,6 +44,8 @@ interface ChatMessage {
   agentName?: string;
   isTyping?: boolean;
 }
+
+const GENERAL_ASSISTANT_ID: AgentId = 'assistant';
 
 export default function AIAgentsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -155,6 +158,15 @@ export default function AIAgentsPage() {
         );
       }
     },
+     // General Assistant - not in the mentionable list, but used implicitly
+    {
+      id: GENERAL_ASSISTANT_ID, name: 'Assistant', description: 'Answers general questions.', avatarIcon: Sparkles, colorClass: 'text-green-400',
+      aiHandler: async (question) => {
+        if (!question.trim()) throw new Error("Question cannot be empty.");
+        const result: GeneralQuestionOutput = await answerGeneralQuestion({ question });
+        return result.answer;
+      }
+    }
   ];
 
   useEffect(() => {
@@ -173,13 +185,13 @@ export default function AIAgentsPage() {
         sender: 'system',
         text: (
           <div>
-            <p>Welcome to the AI Agents Hub! Task agents using their @mention tag and providing the required input.</p>
+            <p>Welcome to the AI Agents Hub! Ask a general question, or task an agent using their @mention tag.</p>
             <Card className="mt-3">
               <CardHeader className="p-3">
-                <CardTitle className="text-sm">Available Agents:</CardTitle>
+                <CardTitle className="text-sm">Taskable Agents:</CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
-                {AVAILABLE_AGENTS.map(agent => (
+                {AVAILABLE_AGENTS.filter(agent => agent.mentionTag).map(agent => ( // Only show agents with mentionTag
                   <div key={agent.id} className="flex items-start gap-1">
                     <agent.avatarIcon className={cn("h-3 w-3 mt-0.5 shrink-0", agent.colorClass)} /> 
                     <div>
@@ -215,112 +227,114 @@ export default function AIAgentsPage() {
     setInputValue('');
 
     const mentionMatch = trimmedInput.match(/^(@[a-zA-Z0-9_]+)\s*(.*)/);
+    let targetAgent: Agent | undefined;
+    let task: string;
+
     if (mentionMatch) {
       const mentionTag = mentionMatch[1];
-      const task = mentionMatch[2] || "";
-      const agent = AVAILABLE_AGENTS.find(a => a.mentionTag === mentionTag);
-
-      if (agent) {
-        setIsAgentProcessing(agent.id);
-        const agentWorkingMessageId = `agent-working-${Date.now()}`;
-        const agentWorkingMessage: ChatMessage = {
-          id: agentWorkingMessageId,
-          sender: agent.id,
-          agentName: agent.name,
-          text: `Understood! Working on task for ${agent.name}...`,
-          timestamp: new Date(),
-          isTyping: true,
-        };
-        setMessages(prev => [...prev, agentWorkingMessage]);
-
-        try {
-          if (agent.aiHandler) {
-            const aiResponse = await agent.aiHandler(task);
-            setMessages(prev => prev.map(msg => 
-              msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: "Processing complete. Here's the result:" } : msg
-            ));
-            const agentResponseMessage: ChatMessage = {
-              id: `agent-response-${Date.now()}`,
-              sender: agent.id,
-              agentName: agent.name,
-              text: aiResponse,
-              timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, agentResponseMessage]);
-          } else {
-             // Fallback for agents without AI handlers (simulated)
-            setMessages(prev => prev.map(msg => 
-              msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Simulating task for ${agent.name}...`} : msg
-            ));
-            setTimeout(() => {
-              const agentResponseMessage: ChatMessage = {
-                id: `agent-response-${Date.now()}`,
-                sender: agent.id,
-                agentName: agent.name,
-                text: (
-                  <div>
-                    <p>Task completed for: <span className="font-semibold">"{task || 'general request'}"</span></p>
-                    <p className="text-xs mt-1 text-muted-foreground">
-                      (Simulated Response) This agent's AI is not fully wired here yet. 
-                      You can typically find more detailed options on the <NextLink href={`/${agent.id.replace('Agent','').toLowerCase()}`} className="underline text-primary hover:text-primary/80">{agent.name} page</NextLink>.
-                    </p>
-                  </div>
-                ),
-                timestamp: new Date(),
-              };
-              setMessages(prev => [...prev, agentResponseMessage]);
-            }, 1500);
-          }
-        } catch (e: any) {
-          const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during AI processing.";
-          toast({
-            title: `Error with ${agent.name}`,
-            description: errorMessage,
-            variant: "destructive",
-          });
-          setMessages(prev => prev.map(msg => 
-            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error processing task.` } : msg
-          ));
-          const errorResponseMessage: ChatMessage = {
-            id: `agent-error-response-${Date.now()}`,
-            sender: agent.id,
-            agentName: agent.name,
-            text: (
-              <div className="text-destructive">
-                <AlertTriangle className="inline h-4 w-4 mr-1" /> 
-                <strong>Error:</strong> {errorMessage}
-                {agent.inputHint && <p className="text-xs mt-1">Please check the input format: {agent.mentionTag} {agent.inputHint}</p>}
-              </div>
-            ),
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, errorResponseMessage]);
-        } finally {
-          setIsAgentProcessing(null);
-           setMessages(prev => prev.map(msg => 
-            msg.id === agentWorkingMessageId && msg.isTyping ? {...msg, isTyping: false } : msg // Ensure typing indicator is removed
-          ));
-        }
-
-      } else {
-        const systemMessage: ChatMessage = {
+      task = mentionMatch[2] || "";
+      targetAgent = AVAILABLE_AGENTS.find(a => a.mentionTag === mentionTag);
+      if (!targetAgent) {
+         const systemMessage: ChatMessage = {
           id: `system-error-${Date.now()}`,
           sender: 'system',
           text: `Agent with mention tag "${mentionTag}" not found.`,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, systemMessage]);
+        return;
       }
     } else {
-      // Handle messages not targeting an agent (e.g. general chat, not implemented here)
-      const systemMessage: ChatMessage = {
-        id: `system-info-${Date.now()}`,
-        sender: 'system',
-        text: "To task an agent, start your message with their @mention tag (e.g., @recon).",
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, systemMessage]);
+      // No @mention, treat as general question for the assistant
+      targetAgent = AVAILABLE_AGENTS.find(a => a.id === GENERAL_ASSISTANT_ID);
+      task = trimmedInput; // The whole input is the question
     }
+
+    if (targetAgent) {
+      setIsAgentProcessing(targetAgent.id);
+      const agentP = targetAgent; // To satisfy TypeScript compiler inside async blocks
+      const agentWorkingMessageId = `agent-working-${Date.now()}`;
+      const agentWorkingMessage: ChatMessage = {
+        id: agentWorkingMessageId,
+        sender: agentP.id,
+        agentName: agentP.name,
+        text: `Understood! ${agentP.name} is working on it...`,
+        timestamp: new Date(),
+        isTyping: true,
+      };
+      setMessages(prev => [...prev, agentWorkingMessage]);
+
+      try {
+        if (agentP.aiHandler) {
+          const aiResponse = await agentP.aiHandler(task);
+          setMessages(prev => prev.map(msg => 
+            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: "Processing complete. Here's the result:" } : msg
+          ));
+          const agentResponseMessage: ChatMessage = {
+            id: `agent-response-${Date.now()}`,
+            sender: agentP.id,
+            agentName: agentP.name,
+            text: aiResponse,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, agentResponseMessage]);
+        } else {
+           // Fallback for agents without AI handlers (simulated) - should not happen for general assistant
+          setMessages(prev => prev.map(msg => 
+            msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Simulating task for ${agentP.name}...`} : msg
+          ));
+          setTimeout(() => {
+            const agentResponseMessage: ChatMessage = {
+              id: `agent-response-${Date.now()}`,
+              sender: agentP.id,
+              agentName: agentP.name,
+              text: (
+                <div>
+                  <p>Task completed for: <span className="font-semibold">"{task || 'general request'}"</span></p>
+                  <p className="text-xs mt-1 text-muted-foreground">
+                    (Simulated Response) This agent's AI is not fully wired here yet. 
+                    You can typically find more detailed options on the <NextLink href={`/${agentP.id.replace('Agent','').toLowerCase()}`} className="underline text-primary hover:text-primary/80">{agentP.name} page</NextLink>.
+                  </p>
+                </div>
+              ),
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, agentResponseMessage]);
+          }, 1500);
+        }
+      } catch (e: any) {
+        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during AI processing.";
+        toast({
+          title: `Error with ${agentP.name}`,
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setMessages(prev => prev.map(msg => 
+          msg.id === agentWorkingMessageId ? {...msg, isTyping: false, text: `Error processing task.` } : msg
+        ));
+        const errorResponseMessage: ChatMessage = {
+          id: `agent-error-response-${Date.now()}`,
+          sender: agentP.id,
+          agentName: agentP.name,
+          text: (
+            <div className="text-destructive">
+              <AlertTriangle className="inline h-4 w-4 mr-1" /> 
+              <strong>Error:</strong> {errorMessage}
+              {agentP.inputHint && agentP.mentionTag && <p className="text-xs mt-1">Please check the input format: {agentP.mentionTag} {agentP.inputHint}</p>}
+            </div>
+          ),
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorResponseMessage]);
+      } finally {
+        setIsAgentProcessing(null);
+         setMessages(prev => prev.map(msg => 
+          msg.id === agentWorkingMessageId && msg.isTyping ? {...msg, isTyping: false } : msg 
+        ));
+      }
+    }
+    // Removed the 'else' block that showed "Agent with mention tag not found" or "To task an agent..."
+    // as it's now handled by the general assistant or specific agent not found logic.
   };
 
   const getAgentAvatar = (sender: AgentId | 'user' | 'system') => {
@@ -332,8 +346,11 @@ export default function AIAgentsPage() {
     }
     const agent = AVAILABLE_AGENTS.find(a => a.id === sender);
     if (agent) {
-      // Wrap icon in a div to control size if needed, or ensure icon itself takes full space
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
+    }
+    // Fallback for general assistant if not explicitly in AVAILABLE_AGENTS for avatar list
+    if (sender === GENERAL_ASSISTANT_ID) {
+      return <div className={cn("h-full w-full flex items-center justify-center", "text-green-400")}><Sparkles className="h-5 w-5" /></div>;
     }
     return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>;
   };
@@ -349,14 +366,14 @@ export default function AIAgentsPage() {
     <div className="animate-fadeIn flex flex-col h-[calc(100vh-8rem)]">
       <PageHeader
         title="AI Agents Hub"
-        description="Interact with your AI cybersecurity agents in this chat."
+        description="Interact with your AI cybersecurity agents or ask general questions."
         icon={Bot}
       />
 
       <Card className="flex-grow flex flex-col shadow-lg overflow-hidden">
         <CardHeader className="p-4 border-b">
           <CardTitle className="text-lg">Agent Chat Room</CardTitle>
-          <CardDescription>Mention an agent (e.g., @recon) to task them. Check agent list for input hints.</CardDescription>
+          <CardDescription>Ask a question or mention an agent (e.g., @recon) to task them.</CardDescription>
         </CardHeader>
         
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
@@ -371,7 +388,7 @@ export default function AIAgentsPage() {
               >
                 {msg.sender !== 'user' && (
                   <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass, 'bg-opacity-20 p-0')}>
+                    <AvatarFallback className={cn(AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass || (msg.sender === GENERAL_ASSISTANT_ID ? 'text-green-400' : ''), 'bg-opacity-20 p-0')}>
                       {getAgentAvatar(msg.sender as AgentId)}
                     </AvatarFallback>
                   </Avatar>
@@ -384,7 +401,7 @@ export default function AIAgentsPage() {
                   <div className="flex items-center justify-between mb-1">
                     <span className={cn(
                       "text-xs font-semibold",
-                      msg.sender !== 'user' && AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass
+                      msg.sender !== 'user' && (AVAILABLE_AGENTS.find(a => a.id === msg.sender)?.colorClass || (msg.sender === GENERAL_ASSISTANT_ID ? 'text-green-400' : ''))
                     )}>
                       {getSenderName(msg.sender, msg.agentName)}
                     </span>
@@ -398,7 +415,7 @@ export default function AIAgentsPage() {
                       <span>Working...</span>
                     </div>
                   ) : (
-                    <div className="text-sm prose prose-sm prose-invert max-w-none break-words">{msg.text}</div>
+                    <div className="text-sm prose prose-sm prose-invert max-w-none break-words">{typeof msg.text === 'string' ? <div dangerouslySetInnerHTML={{__html: msg.text.replace(/\n/g, '<br />') }}/> : msg.text}</div>
                   )}
                 </div>
                 {msg.sender === 'user' && (
@@ -420,7 +437,7 @@ export default function AIAgentsPage() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Type your message or task (e.g., @recon <Nmap output>)..."
+              placeholder="Ask a question or task an agent (e.g., @recon <Nmap output>)..."
               className="flex-grow bg-input focus:ring-primary"
               disabled={!!isAgentProcessing}
             />
@@ -431,8 +448,8 @@ export default function AIAgentsPage() {
           </form>
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
-              `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name} is currently processing a task.` :
-              `Mention an agent. Example: @flag flag{example_flag}` }
+              `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Assistant'} is currently processing.` :
+              `Ask anything, or use @mention for specific agents.` }
           </div>
         </div>
       </Card>
