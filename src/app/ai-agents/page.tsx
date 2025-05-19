@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Bot, User, Send, AlertTriangle, Sparkles, Briefcase, Code, ClipboardCheck, Network, Cpu, DraftingCompass, SearchCheck, Gamepad2, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
@@ -52,7 +52,7 @@ interface Agent {
 
 interface ChatMessage {
   id: string;
-  sender: 'user' | AgentId | 'system';
+  sender: 'user' | AgentId; // Removed 'system' as technicalDirector handles general queries
   text: string | React.ReactNode;
   timestamp: Date;
   agentName?: string;
@@ -233,19 +233,21 @@ export default function AIAgentsPage() {
   }, [messages]);
   
   useEffect(() => {
+    const director = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
     setMessages([
       {
-        id: 'system-welcome',
-        sender: 'system',
+        id: 'director-welcome',
+        sender: TECHNICAL_DIRECTOR_ID,
+        agentName: director?.name || 'Technical Director',
         text: (
           <div>
-            <p>Welcome to the AI Agents Hub! Ask the Technical Director a question, or task a specific agent using their @mention tag.</p>
+            <p>Welcome to the AI Agents Hub! I am the Technical Director. Ask me general questions, or task a specific agent using their @mention tag.</p>
             <Card className="mt-3">
               <CardHeader className="p-3">
                 <CardTitle className="text-sm">Taskable Agents:</CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0 text-xs grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
-                {AVAILABLE_AGENTS.map(agent => ( 
+                {AVAILABLE_AGENTS.filter(a => a.id !== TECHNICAL_DIRECTOR_ID).map(agent => ( 
                   <div key={agent.id} className="flex items-start gap-1">
                     <agent.avatarIcon className={cn("h-3 w-3 mt-0.5 shrink-0", agent.colorClass)} /> 
                     <div>
@@ -292,10 +294,12 @@ export default function AIAgentsPage() {
       task = mentionMatch[2] || "";
       targetAgent = AVAILABLE_AGENTS.find(a => a.mentionTag === mentionTag);
       if (!targetAgent) {
-         const systemMessage: ChatMessage = {
-          id: `system-error-${Date.now()}`,
-          sender: 'system',
-          text: `Agent with mention tag "${mentionTag}" not found. Task the Technical Director (@director) for guidance or general questions.`,
+        const director = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
+        const systemMessage: ChatMessage = {
+          id: `director-error-${Date.now()}`,
+          sender: TECHNICAL_DIRECTOR_ID,
+          agentName: director?.name || "Technical Director",
+          text: `Agent with mention tag "${mentionTag}" not found. You can ask me for guidance or list available agents.`,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, systemMessage]);
@@ -305,15 +309,18 @@ export default function AIAgentsPage() {
       // If no @mention, send to Technical Director
       targetAgent = AVAILABLE_AGENTS.find(a => a.id === TECHNICAL_DIRECTOR_ID);
       task = trimmedInput; 
-      if (!targetAgent) { // Should not happen if director is always in AVAILABLE_AGENTS
+      if (!targetAgent) { 
         console.error("Technical Director agent not found in AVAILABLE_AGENTS");
-        const systemMessage: ChatMessage = {
-          id: `system-error-no-director-${Date.now()}`,
-          sender: 'system',
-          text: `Critical error: Technical Director agent definition is missing.`,
-          timestamp: new Date(),
+        // This case should ideally not be reachable if Technical Director is always defined.
+        // Fallback to a generic error message if director somehow isn't found.
+         const errorMsg: ChatMessage = {
+            id: `system-error-no-director-${Date.now()}`,
+            sender: 'technicalDirector', // Fallback ID, ensure it's handled visually
+            agentName: 'System Monitor',
+            text: `Critical error: Technical Director agent definition is missing. Cannot process general queries.`,
+            timestamp: new Date(),
         };
-        setMessages(prev => [...prev, systemMessage]);
+        setMessages(prev => [...prev, errorMsg]);
         return;
       }
     }
@@ -455,23 +462,20 @@ export default function AIAgentsPage() {
     setShowSuggestions(false);
   };
 
-  const getAgentAvatar = (sender: AgentId | 'user' | 'system') => {
+  const getAgentAvatar = (sender: AgentId | 'user') => {
     if (sender === 'user') {
       return <User className="h-full w-full" />;
-    }
-    if (sender === 'system') {
-      return <Bot className="h-full w-full text-primary" />;
     }
     const agent = AVAILABLE_AGENTS.find(a => a.id === sender);
     if (agent) {
       return <div className={cn("h-full w-full flex items-center justify-center", agent.colorClass)}><agent.avatarIcon className="h-5 w-5" /></div>;
     }
-    return <div className="h-full w-full flex items-center justify-center"><Bot className="h-5 w-5" /></div>; 
+    // Fallback for system/director if ID somehow mismatches or for error messages not tied to a specific known agent
+    return <div className="h-full w-full flex items-center justify-center text-primary"><Briefcase className="h-5 w-5" /></div>; 
   };
   
-  const getSenderName = (sender: AgentId | 'user' | 'system', agentName?: string) => {
+  const getSenderName = (sender: AgentId | 'user', agentName?: string) => {
     if (sender === 'user') return 'You';
-    if (sender === 'system') return 'System';
     return agentName || AVAILABLE_AGENTS.find(a => a.id === sender)?.name || 'Agent';
   };
 
@@ -510,7 +514,8 @@ export default function AIAgentsPage() {
                 <div className={cn(
                     "max-w-[70%] p-3 rounded-lg shadow", 
                     msg.sender === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card text-card-foreground rounded-bl-none',
-                    msg.sender === 'system' && 'bg-muted text-muted-foreground w-full max-w-full'
+                    // For system/director messages that are part of initial setup or non-error system messages.
+                    msg.sender === TECHNICAL_DIRECTOR_ID && msg.id.startsWith('director-welcome') && 'bg-muted text-muted-foreground w-full max-w-full'
                 )}>
                   <div className="flex items-center justify-between mb-1">
                     <span className={cn(
@@ -552,7 +557,7 @@ export default function AIAgentsPage() {
         <div className="p-4 border-t bg-background">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2 relative">
             <Popover open={showSuggestions} onOpenChange={setShowSuggestions}>
-              <PopoverAnchor>
+              <PopoverTrigger asChild>
                 <Input
                   ref={inputRef}
                   type="text"
@@ -564,7 +569,7 @@ export default function AIAgentsPage() {
                   disabled={!!isAgentProcessing}
                   autoComplete="off"
                 />
-              </PopoverAnchor>
+              </PopoverTrigger>
               {showSuggestions && filteredSuggestions.length > 0 && (
                 <PopoverContent
                   className="w-[calc(100vw-2rem-48px-0.5rem)] sm:w-[350px] p-1" // Adjust width as needed
@@ -600,10 +605,11 @@ export default function AIAgentsPage() {
            <div className="text-xs text-muted-foreground mt-2">
             {isAgentProcessing ? 
               `${AVAILABLE_AGENTS.find(a => a.id === isAgentProcessing)?.name || 'Agent'} is currently processing.` :
-              `The Technical Director is listening. Use @mention for specific agents.` }
+              `The Technical Director (@director) is listening. Use @mention for other agents.` }
           </div>
         </div>
       </Card>
     </div>
   );
 }
+
